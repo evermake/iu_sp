@@ -1,9 +1,9 @@
-# Homework 01 — Merge sort in coroutines
+___
+language: C
+deadline: June 20, 2023
+___
 
-___
-Language: C
-Deadline: 2 weeks
-___
+# Homework 01 — Merge sort in coroutines
 
 > Original materials have been copied from [here](https://github.com/Gerold103/sysprog/tree/d72b72880d6ee5295cea224cc734dac7c14d4b54/1).
 

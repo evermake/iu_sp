@@ -12,7 +12,7 @@ order separated by whitespaces. Each file should be sorted, and
 then results should be merged into a new file. That is, merge sort
 should be implemented.
 
-### Rules:
+### Rules
 
 - Each file should be sorted in its own coroutine. This rule
   targets your understanding of what cooperative multitasking is.
@@ -27,7 +27,7 @@ should be implemented.
   but doesn't account time spent in blocking syscalls.
 
 
-### Restrictions:
+### Restrictions
 
 - Global variables are not allowed (except for the already
   existing ones).
@@ -55,7 +55,7 @@ should be implemented.
     `fclose()`. It is not allowed to use `std::iostream`,
     `std::ostream`, `std::istream` and other STL helpers.
 
-### Relaxations:
+### Relaxations
 
 - Numbers fit into `int` type.
 
@@ -65,7 +65,7 @@ should be implemented.
 - The final step - merging of the sorted files - can be done right
   in `main()` without any coroutines.
 
-### Advices:
+### Advices
 
 - You can find more info about various unknown functions using
   `man` command line utility. For example, `man read` (or
@@ -88,7 +88,7 @@ should be implemented.
   - Start using coroutines.
 
 
-### Possible solutions:
+### Possible solutions
 
 The coroutines should switch between each other. Do the so called
 "yield"s. These are `coro_yield()` in the `solution.c` file. There are
@@ -121,12 +121,12 @@ The additional options for +5 points do not include each other.
 That is, you can do none, or do only one, or do only another, or
 both for +10. Or use C++ and get -5 to your sum.
 
-Input: names of files to sort via the command line arguments. If
+**Input**: names of files to sort via the command line arguments. If
 you do the bonus tasks, then you also get the target latency in
 microseconds (if you do that bonus) and the coroutine count (if
 you do that bonus) before the file names.
 
-Output: total work time, work time and number of context switches
+**Output**: total work time, work time and number of context switches
 for each individual coroutine. Keep in mind that the coroutine
 work time doesn't include its wait time, i.e. while it was
 sleeping during the `coro_yield()`. So you should stop coroutine
@@ -148,4 +148,4 @@ python3 generator.py -f test6.txt -c 100000 -m 10000
 ```
 
 For checking the result you can use the script `checker.py`. All
-scripts assume working in python 3.
+scripts assume working in Python 3.

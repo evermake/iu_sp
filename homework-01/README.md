@@ -1,9 +1,9 @@
 # Homework 01 — Merge sort in coroutines
 
-------------------------------------------------------------------
-Language: C.
-Deadline: 2 weeks.
-------------------------------------------------------------------
+___
+Language: C
+Deadline: 2 weeks
+___
 
 > Original materials have been copied from [here](https://github.com/Gerold103/sysprog/tree/d72b72880d6ee5295cea224cc734dac7c14d4b54/1).
 
@@ -21,9 +21,9 @@ should be implemented.
   or anything.
 
 - For time measurements you should use
-  clock_gettime(CLOCK_MONOTONIC). Non-monotonic clocks (such as
-  time(), gettimeofday(), CLOCK_REALTIME, etc) can go backwards
-  sometimes, screwing the time measurements. clock() is monotonic,
+  `clock_gettime(CLOCK_MONOTONIC)`. Non-monotonic clocks (such as
+  `time()`, `gettimeofday()`, `CLOCK_REALTIME`, etc.) can go backwards
+  sometimes, screwing the time measurements. `clock()` is monotonic,
   but doesn't account time spent in blocking syscalls.
 
 
@@ -33,7 +33,7 @@ should be implemented.
   existing ones).
 
 - Sorting should be implemented by you without built-in functions
-  like qsort(), system("sort ...") etc.
+  like `qsort()`, `system("sort ...")`, etc.
 
 - Sorting complexity of the individual files should be < O(N^2)
   (for example, you can't use bubble sort). Given that
@@ -48,29 +48,29 @@ should be implemented.
 
 - Work with files should be done
 
-  - either via a numeric file descriptor using open() / read() /
-    write() / close() functions,
+  - either via a numeric file descriptor using `open()` / `read()` /
+    `write()` / `close()` functions,
 
-  - or via FILE* and functions fopen() / fscanf() / fprintf() /
-    fclose(). It is not allowed to use std::iostream,
-    std::ostream, std::istream and other STL helpers.
+  - or via `FILE*` and functions `fopen()` / `fscanf()` / `fprintf()` /
+    `fclose()`. It is not allowed to use `std::iostream`,
+    `std::ostream`, `std::istream` and other STL helpers.
 
 ### Relaxations:
 
-- Numbers fit into 'int' type.
+- Numbers fit into `int` type.
 
 - You can assume, that all the files fit into the main memory,
   even together.
 
 - The final step - merging of the sorted files - can be done right
-  in main() without any coroutines.
+  in `main()` without any coroutines.
 
 ### Advices:
 
 - You can find more info about various unknown functions using
-  'man' command line utility. For example, 'man read' (or
-  'man 2 read') prints manual for 'read()' function. 'man strdup'
-  can tell more about 'strdup()' function. Similar for other
+  `man` command line utility. For example, `man read` (or
+  `man 2 read`) prints manual for `read()`` function. `man strdup`
+  can tell more about `strdup()` function. Similar for other
   built-in functions.
 
 - Steps which you can follow if don't know where to start:
@@ -91,18 +91,18 @@ should be implemented.
 ### Possible solutions:
 
 The coroutines should switch between each other. Do the so called
-'yield's. These are coro_yield() in the solution.c file. There are
+"yield"s. These are `coro_yield()` in the `solution.c` file. There are
 several options how you use them:
 
-- 15 points: yield after each iteration in your individual files
+- **15 points**: yield after each iteration in your individual files
   sorting loops.
 
-- +5 points: each of N coroutines is given T / N microseconds,
+- **+5 points**: each of N coroutines is given T / N microseconds,
   where T - target latency given as a command line parameter.
   After each sorting loop iteration you yield only if the current
   coroutine's time quantum is over.
 
-- +5 points: allow to specify the number of coroutines. Each
+- **+5 points**: allow to specify the number of coroutines. Each
   coroutine should work as follows: if there are unsorted files,
   then pick one and sort it, then repeat. If there are no unsorted
   files, then the coroutine exits. For example, assume there are
@@ -113,9 +113,9 @@ several options how you use them:
   all files are sorted. Then you do the normal merge sort. This
   bonus task basically offers you do implement a coroutine pool.
 
-- -5 points: (yes, minus, not plus) - you can use C++ and STL
-  containers. Including std::iostream/ostream/etc. But you still
-  can't use std::sort().
+- **-5 points**: you can use C++ and STL containers. Including
+  `std::iostream`/`ostream`/etc. But you still can't use
+  `std::sort()`.
 
 The additional options for +5 points do not include each other.
 That is, you can do none, or do only one, or do only another, or
@@ -129,11 +129,11 @@ you do that bonus) before the file names.
 Output: total work time, work time and number of context switches
 for each individual coroutine. Keep in mind that the coroutine
 work time doesn't include its wait time, i.e. while it was
-sleeping during the coro_yield(). So you should stop coroutine
-timer before each coro_yield() and start it again right after.
+sleeping during the `coro_yield()`. So you should stop coroutine
+timer before each `coro_yield()` and start it again right after.
 
 For testing you can create your files or generate them using
-generator.py script. An example, which should work for 15 points
+`generator.py` script. An example, which should work for 15 points
 solution:
 
 ```
@@ -147,5 +147,5 @@ python3 generator.py -f test6.txt -c 100000 -m 10000
 ./main test1.txt test2.txt test3.txt test4.txt test5.txt test6.txt
 ```
 
-For checking the result you can use the script checker.py. All
+For checking the result you can use the script `checker.py`. All
 scripts assume working in python 3.

@@ -1,7 +1,7 @@
-___
+---
 language: C
 deadline: June 20, 2023
-___
+---
 
 # Homework 01 — Merge sort in coroutines
 

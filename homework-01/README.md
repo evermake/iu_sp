@@ -69,7 +69,7 @@ should be implemented.
 
 - You can find more info about various unknown functions using
   `man` command line utility. For example, `man read` (or
-  `man 2 read`) prints manual for `read()`` function. `man strdup`
+  `man 2 read`) prints manual for `read()` function. `man strdup`
   can tell more about `strdup()` function. Similar for other
   built-in functions.
 

@@ -27,14 +27,17 @@ struct coro_context {
    * Total number of switches to other coroutines.
    */
   long long total_switch_count;
-};
 
-int global_files_count;
-char **global_filenames_to_sort;
-int global_file_to_sort_idx;
-int **global_sorted_arrays;
-size_t *global_sorted_arrays_sizes;
-long long global_coroutine_quantum;
+  /**
+   * Data required by the coroutine to do its work.
+   */
+  int files_count;
+  char **filenames_to_sort;
+  int *file_to_sort_idx;
+  int **sorted_arrays;
+  size_t *sorted_arrays_sizes;
+  long long coroutine_quantum;
+};
 
 /**
  * Returns the current monotonic time in microseconds.
@@ -47,10 +50,11 @@ static long long get_now() {
 
 static void yield_if_necessary_record_work_time(
   long long *total_work_time,
-  long long *last_work_timer_start
+  long long *last_work_timer_start,
+  long long quantum
 ) {
   long long work_time = get_now() - *last_work_timer_start;
-  if (work_time > global_coroutine_quantum) {
+  if (work_time > quantum) {
     *total_work_time += work_time;
     coro_yield();
     *last_work_timer_start = get_now();
@@ -61,7 +65,8 @@ static void heap_sort(
   int *array,
   int size,
   long long *total_work_time,
-  long long *last_work_timer_start
+  long long *last_work_timer_start,
+  long long quantum
 ) {
   for (int i = size / 2 - 1; i >= 0; --i) {
     int j = i;
@@ -85,7 +90,8 @@ static void heap_sort(
 
       yield_if_necessary_record_work_time(
         total_work_time,
-        last_work_timer_start
+        last_work_timer_start,
+        quantum
       );
     }
   }
@@ -114,7 +120,8 @@ static void heap_sort(
 
       yield_if_necessary_record_work_time(
         total_work_time,
-        last_work_timer_start
+        last_work_timer_start,
+        quantum
       );
     }
   }
@@ -129,11 +136,11 @@ static int coroutine_func_f(void *context) {
   struct coro_context *ctx = context;
   struct coro *this = coro_this();
 
-  while (global_file_to_sort_idx < global_files_count) {
+  while (*ctx->file_to_sort_idx < ctx->files_count) {
     // "Pick" the file to sort.
-    int taken_file_idx = global_file_to_sort_idx;
-    ++global_file_to_sort_idx;
-    char *filename = global_filenames_to_sort[taken_file_idx];
+    int taken_file_idx = *ctx->file_to_sort_idx;
+    ++(*ctx->file_to_sort_idx);
+    char *filename = ctx->filenames_to_sort[taken_file_idx];
 
     // Open the file.
     FILE *file = fopen(filename, "r");
@@ -152,14 +159,15 @@ static int coroutine_func_f(void *context) {
 
     yield_if_necessary_record_work_time(
       &ctx->total_work_time,
-      &work_timer_last_start
+      &work_timer_last_start,
+      ctx->coroutine_quantum
     );
 
     // Allocate memory for the numbers.
     int *numbers = malloc(sizeof(int) * numbers_count);
 
-    global_sorted_arrays[taken_file_idx] = numbers;
-    global_sorted_arrays_sizes[taken_file_idx] = numbers_count;
+    ctx->sorted_arrays[taken_file_idx] = numbers;
+    ctx->sorted_arrays_sizes[taken_file_idx] = numbers_count;
 
     // Read the numbers from the file.
     rewind(file);
@@ -169,7 +177,8 @@ static int coroutine_func_f(void *context) {
 
     yield_if_necessary_record_work_time(
       &ctx->total_work_time,
-      &work_timer_last_start
+      &work_timer_last_start,
+      ctx->coroutine_quantum
     );
 
     // Sort the numbers with yielding.
@@ -177,7 +186,8 @@ static int coroutine_func_f(void *context) {
       numbers,
       numbers_count,
       &ctx->total_work_time,
-      &work_timer_last_start
+      &work_timer_last_start,
+      ctx->coroutine_quantum
     );
   }
 
@@ -229,7 +239,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  global_coroutine_quantum = target_latency / coroutines_count;
+  long long global_coroutine_quantum = target_latency / coroutines_count;
   printf(
     "Sorting %d files, with %ld coroutines, each with %lldμs quantum...\n\n",
     files_count,
@@ -237,11 +247,11 @@ int main(int argc, char **argv) {
     global_coroutine_quantum
   );
 
-  global_files_count = files_count;
-  global_filenames_to_sort = argv + (argc - files_count);
-  global_file_to_sort_idx = 0;
-  global_sorted_arrays = malloc(sizeof(int *) * files_count);
-  global_sorted_arrays_sizes = malloc(sizeof(size_t) * files_count);
+  int global_files_count = files_count;
+  char **global_filenames_to_sort = argv + (argc - files_count);
+  int global_file_to_sort_idx = 0;
+  int **global_sorted_arrays = malloc(sizeof(int *) * files_count);
+  size_t *global_sorted_arrays_sizes = malloc(sizeof(size_t) * files_count);
 
   /* Initialize our coroutine global cooperative scheduler. */
   coro_sched_init();
@@ -257,6 +267,12 @@ int main(int argc, char **argv) {
     ctx->name = strdup(name);
     ctx->total_work_time = 0;
     ctx->total_switch_count = 0;
+    ctx->files_count = global_files_count;
+    ctx->filenames_to_sort = global_filenames_to_sort;
+    ctx->file_to_sort_idx = &global_file_to_sort_idx;
+    ctx->sorted_arrays = global_sorted_arrays;
+    ctx->sorted_arrays_sizes = global_sorted_arrays_sizes;
+    ctx->coroutine_quantum = global_coroutine_quantum;
 
     printf("Starting coroutine %s...\n", ctx->name);
 

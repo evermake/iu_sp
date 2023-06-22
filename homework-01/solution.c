@@ -195,6 +195,8 @@ void print_usage(char *program_name) {
 }
 
 int main(int argc, char **argv) {
+  long long start_time = get_now();
+
   long target_latency = DEFAULT_TARGET_LATENCY;
   long coroutines_count = DEFAULT_COROUTINES;
 
@@ -265,12 +267,6 @@ int main(int argc, char **argv) {
   /* Wait for all the coroutines to end. */
   struct coro *c;
   while ((c = coro_sched_wait()) != NULL) {
-    /*
-     * Each 'wait' returns a finished coroutine with which you can
-     * do anything you want. Like check its exit status, for
-     * example. Don't forget to free the coroutine afterwards.
-     */
-//    printf("Finished %d\n", coro_status(c));
     coro_delete(c);
   }
   printf("All coroutines finished\n\n");
@@ -292,8 +288,6 @@ int main(int argc, char **argv) {
     free(ctx->name);
   }
   free(contexts);
-
-  long long merge_start_time = get_now();
 
   // Open the output file.
   FILE *output_file = fopen(OUTPUT_FILE, "w");
@@ -335,17 +329,6 @@ int main(int argc, char **argv) {
   // Close the output file.
   fclose(output_file);
 
-  long long merge_total_time = get_now() - merge_start_time;
-
-  printf("\n");
-  printf("Total work time = coroutines total + merging arrays into file\n");
-  printf(
-    "%lldμs = %lldμs + %lldμs\n",
-    coroutines_total_work_time + merge_total_time,
-    coroutines_total_work_time,
-    merge_total_time
-  );
-
   // Free memory.
   free(current_indices);
   for (int i = 0; i < files_count; ++i) {
@@ -354,6 +337,11 @@ int main(int argc, char **argv) {
   free(global_sorted_arrays);
   free(global_sorted_arrays_sizes);
 
+  long long total_work_time = get_now() - start_time;
+
+  printf("\n");
+  printf("Total program execution time = %lldμs\n", total_work_time);
+  printf("Coroutines total execution time = %lldμs\n", coroutines_total_work_time);
 
   return 0;
 }

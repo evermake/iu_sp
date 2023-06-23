@@ -181,6 +181,8 @@ static int coroutine_func_f(void *context) {
       ctx->coroutine_quantum
     );
 
+    fclose(file);
+
     // Sort the numbers with yielding.
     heap_sort(
       numbers,

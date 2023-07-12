@@ -1,6 +1,6 @@
 ---
 language: C
-deadline: July 13, 2023
+deadline: July 20, 2023
 ---
 
 # Homework 04 — Thread pool

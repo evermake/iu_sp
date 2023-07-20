@@ -18,7 +18,7 @@ $ command_name param1 param2 ...
 and execute them by calling `command_name` with the given parameters. So be a
 terminal, basically.
 
-### Rules
+## Rules
 
 - The program should correctly handle quoted strings even if there are
   whitespaces inside it.
@@ -55,7 +55,7 @@ terminal, basically.
 - The code should be built successfully with these compiler flags:
   `-Wextra -Werror -Wall -Wno-gnu-folding-constant`.
 
-### Restrictions
+## Restrictions
 
 - Global variables are not allowed (except for the already existing ones).
 
@@ -69,7 +69,7 @@ terminal, basically.
 - It is forbidden to use functions like `system()`, `popen()` or use any other
   way to access existing terminal-like ready-to-use functions.
 
-### Relaxations
+## Relaxations
 
 - You don't need to support redirect of specific output streams, like stderr.
   These commands: `1>`, `2>`, `$>`, `1>>`, and alike are not needed. (Usual `>`
@@ -80,7 +80,7 @@ terminal, basically.
 
 - You don't need to support `~` path component in `cd` command.
 
-### Input examples
+## Input examples
 
 - Print process list and find 'init' string in them:
   ```
@@ -112,7 +112,7 @@ terminal, basically.
   >>> 3
   ```
 
-### Points
+## Points
 
 - **15 points**: all described above,
 - **20 points**: support operators `&&` and `||`,
@@ -123,7 +123,7 @@ terminal, basically.
 
 **Output**: the same what a real terminal prints.
 
-### Where to begin?
+## Where to begin?
 
 The recommended implementation plan is below:
 

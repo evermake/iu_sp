@@ -1,8 +1,8 @@
 #include "thread_pool.h"
 
-#include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 struct thread_task {
   thread_task_f function;
@@ -30,6 +30,7 @@ struct thread_pool {
   int thread_idx_that_should_exit;
 
   pthread_cond_t cv;
+  pthread_cond_t spawn_cv;
   pthread_mutex_t mutex;
 
   int pending_task_count;
@@ -57,21 +58,15 @@ static void *_thread_worker(void *arg) {
 
   free(args);
 
-  bool first_run = true;
+  pthread_mutex_lock(&pool->mutex);
+  ++pool->thread_count;
+  pthread_cond_signal(&pool->spawn_cv);
   while (true) {
-    pthread_mutex_lock(&pool->mutex);
-    if (first_run) {
-      first_run = false;
-    } else {
-      --pool->running_task_count;
-      ++pool->idle_thread_count;
-    }
+    ++pool->idle_thread_count;
     while (pool->pending_task_count < 1 &&
            pool->thread_idx_that_should_exit != idx) {
       pthread_cond_wait(&pool->cv, &pool->mutex);
     }
-
-    --pool->idle_thread_count;
 
     if (pool->thread_idx_that_should_exit == idx) {
       pthread_mutex_unlock(&pool->mutex);
@@ -81,6 +76,7 @@ static void *_thread_worker(void *arg) {
     struct thread_task *task = pool->pending_task_list;  // must not be NULL
     pool->pending_task_list = task->next;
     task->next = NULL;
+    --pool->idle_thread_count;
     --pool->pending_task_count;
     ++pool->running_task_count;
 
@@ -93,10 +89,13 @@ static void *_thread_worker(void *arg) {
     // Execute the task
     void *result = task->function(task->arg);
 
+
+    pthread_mutex_lock(&pool->mutex);
     pthread_mutex_lock(&task->mutex);
     task->is_running = false;
     task->is_finished = true;
     task->result = result;
+    --pool->running_task_count;
     pthread_mutex_unlock(&task->mutex);
     pthread_cond_signal(&task->cv);
   }
@@ -119,6 +118,7 @@ int thread_pool_new(int max_thread_count, struct thread_pool **pool) {
   new_pool->pending_task_list = NULL;
   pthread_mutex_init(&new_pool->mutex, NULL);
   pthread_cond_init(&new_pool->cv, NULL);
+  pthread_cond_init(&new_pool->spawn_cv, NULL);
 
   *pool = new_pool;
 
@@ -130,30 +130,28 @@ int thread_pool_thread_count(const struct thread_pool *pool) {
 }
 
 int thread_pool_delete(struct thread_pool *pool) {
-  // TODO: should we use trylock? 🤔
-  int ret = pthread_mutex_trylock(&pool->mutex);
-  if (ret == EBUSY) {
-    return TPOOL_ERR_HAS_TASKS;
-  }
-  if (pool->running_task_count > 0 || pool->pending_task_count > 0) {
+  pthread_mutex_lock(&pool->mutex);
+  if (pool->running_task_count > 0 || pool->pending_task_count > 0 || pool->idle_thread_count != pool->thread_count) {
     pthread_mutex_unlock(&pool->mutex);
     return TPOOL_ERR_HAS_TASKS;
   }
-  pthread_mutex_unlock(&pool->mutex);
 
   if (pool->threads != NULL) {
     // Tell workers to exit
     for (int i = 0; i < pool->thread_count; ++i) {
       pool->thread_idx_that_should_exit = i;
       pthread_cond_broadcast(&pool->cv);
+      pthread_mutex_unlock(&pool->mutex);
       pthread_join(pool->threads[i], NULL);
+      pthread_mutex_lock(&pool->mutex);
     }
-
     free(pool->threads);
   }
+  pthread_mutex_unlock(&pool->mutex);
 
   pthread_mutex_destroy(&pool->mutex);
   pthread_cond_destroy(&pool->cv);
+  pthread_cond_destroy(&pool->spawn_cv);
 
   free(pool);
 
@@ -167,40 +165,42 @@ int thread_pool_push_task(struct thread_pool *pool, struct thread_task *task) {
     return TPOOL_ERR_TOO_MANY_TASKS;
   }
 
+  int required_thread_count = pool->thread_count;
+
   if (pool->threads == NULL) {
     // Create first worker
     pool->threads = malloc(sizeof(pthread_t));
-    pool->thread_count = 1;
-    pool->idle_thread_count = 1;
     struct _thread_worker_arg *arg = malloc(sizeof(struct _thread_worker_arg));
     arg->pool = pool;
     arg->idx = 0;
-
+    required_thread_count = 1;
     pthread_create(&pool->threads[0], NULL, _thread_worker, arg);
-  }
-
-  if (pool->idle_thread_count == 0 &&
-      pool->thread_count < pool->max_thread_count) {
+  } else if (pool->idle_thread_count == 0 &&
+             pool->thread_count < pool->max_thread_count) {
     // Create additional worker
     pool->threads =
       realloc(pool->threads, sizeof(pthread_t) * (pool->thread_count + 1));
     struct _thread_worker_arg *arg = malloc(sizeof(struct _thread_worker_arg));
     arg->pool = pool;
     arg->idx = pool->thread_count;
-    ++pool->thread_count;
-    ++pool->idle_thread_count;
-    pthread_create(&pool->threads[pool->thread_count - 1], NULL, _thread_worker,
+    pthread_create(&pool->threads[pool->thread_count], NULL, _thread_worker,
                    arg);
+    ++required_thread_count;
+  }
+
+  while (pool->thread_count != required_thread_count) {
+    // Wait until spawned threads will be ready
+    pthread_cond_wait(&pool->spawn_cv, &pool->mutex);
   }
 
   task->pool = pool;
   task->next = pool->pending_task_list;
+  pool->pending_task_list = task;
   task->is_finished = false;
   task->is_running = false;
-  pool->pending_task_list = task;
   ++pool->pending_task_count;
-  pthread_mutex_unlock(&pool->mutex);
   pthread_cond_signal(&pool->cv);
+  pthread_mutex_unlock(&pool->mutex);
 
   return 0;
 }

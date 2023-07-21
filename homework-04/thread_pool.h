@@ -2,19 +2,19 @@
 
 #include <stdbool.h>
 
-/**
- * Here you should specify which features do you want to implement via macros:
- * NEED_DETACH and NEED_TIMED_JOIN. If you want to enable detach, do:
- *
- *     #define NEED_DETACH
- *
- * To enable timed join do:
- *
- *     #define NEED_TIMED_JOIN
- *
- * It is important to define these macros here, in the header, because it is
- * used by tests.
- */
+
+// Here you should specify which features do you want to implement via macros:
+// NEED_DETACH and NEED_TIMED_JOIN. If you want to enable detach, do:
+//
+//     #define NEED_DETACH
+//
+// To enable timed join do:
+//
+#define NEED_TIMED_JOIN
+//
+// It is important to define these macros here, in the header, because it is
+// used by tests.
+//
 
 struct thread_pool;
 struct thread_task;
@@ -26,7 +26,7 @@ enum {
   TPOOL_MAX_TASKS = 100000,
 };
 
-enum thread_poool_errcode {
+enum thread_pool_errcode {
   TPOOL_ERR_INVALID_ARGUMENT = 1,
   TPOOL_ERR_TOO_MANY_TASKS,
   TPOOL_ERR_HAS_TASKS,

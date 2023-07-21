@@ -2,7 +2,9 @@
 
 #include <pthread.h>
 #include <stdlib.h>
-#include <stdio.h>
+#include <errno.h>
+#include <time.h>
+#include <sys/time.h>
 
 struct thread_task {
   thread_task_f function;
@@ -17,8 +19,6 @@ struct thread_task {
   pthread_mutex_t mutex;
 
   struct thread_task *next;
-
-  /* PUT HERE OTHER MEMBERS */
 };
 
 struct thread_pool {
@@ -36,8 +36,6 @@ struct thread_pool {
   int pending_task_count;
   int running_task_count;
   struct thread_task *pending_task_list;
-
-  /* PUT HERE OTHER MEMBERS */
 };
 
 struct _thread_worker_arg {
@@ -248,13 +246,53 @@ int thread_task_join(struct thread_task *task, void **result) {
 
 #ifdef NEED_TIMED_JOIN
 
-int thread_task_timed_join(struct thread_task *task, double timeout,
-                           void **result) {
-  /* IMPLEMENT THIS FUNCTION */
-  (void)task;
-  (void)timeout;
-  (void)result;
-  return TPOOL_ERR_NOT_IMPLEMENTED;
+struct timespec double_to_timespec(double duration) {
+  struct timespec ts;
+  ts.tv_sec = (time_t) duration;
+  ts.tv_nsec = (duration - ts.tv_sec) * 1e9;
+  if (ts.tv_nsec >= 1e9) {
+    ts.tv_sec++;
+    ts.tv_nsec -= 1e9;
+  }
+  return ts;
+}
+
+int thread_task_timed_join(struct thread_task *task, double timeout, void **result) {
+  if (task->pool == NULL) {
+    return TPOOL_ERR_TASK_NOT_PUSHED;
+  }
+
+  pthread_mutex_lock(&task->mutex);
+
+  if (timeout < 0.000000001) {
+    if (!task->is_finished) {
+      pthread_mutex_unlock(&task->mutex);
+      return TPOOL_ERR_TIMEOUT;
+    }
+  } else {
+    struct timeval tv;
+    struct timespec ts;
+    struct timespec timeout_ts = double_to_timespec(timeout);
+    gettimeofday(&tv, NULL);
+    ts.tv_sec = tv.tv_sec + timeout_ts.tv_sec;
+    ts.tv_nsec = tv.tv_usec * 1000 + timeout_ts.tv_nsec;
+
+    int cond_res = 0;
+    while (!task->is_finished && cond_res != ETIMEDOUT) {
+      cond_res = pthread_cond_timedwait(&task->cv, &task->mutex, &ts);
+    }
+
+    if (cond_res == ETIMEDOUT) {
+      pthread_mutex_unlock(&task->mutex);
+      return TPOOL_ERR_TIMEOUT;
+    }
+  }
+
+  *result = task->result;
+  task->pool = NULL;
+  pthread_mutex_unlock(&task->mutex);
+
+  return 0;
 }
 
 #endif

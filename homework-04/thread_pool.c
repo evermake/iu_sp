@@ -87,15 +87,14 @@ static void *_thread_worker(void *arg) {
     // Execute the task
     void *result = task->function(task->arg);
 
-
     pthread_mutex_lock(&pool->mutex);
     pthread_mutex_lock(&task->mutex);
     task->is_running = false;
     task->is_finished = true;
     task->result = result;
     --pool->running_task_count;
-    pthread_mutex_unlock(&task->mutex);
     pthread_cond_signal(&task->cv);
+    pthread_mutex_unlock(&task->mutex);
   }
   return NULL;
 }

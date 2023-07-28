@@ -157,15 +157,16 @@ int ufs_open(const char *filename, int flags) {
     file->size = 0;
     file->first_block = NULL;
     file->last_block = NULL;
-    file->next = NULL;
     if (file_list == NULL) {
       // This is the first file in the list
+      file->next = NULL;
       file->prev = NULL;
       file_list = file;
     } else {
-      // This is not the first file in the list
-      file->prev = file_list;
-      file_list->next = file;
+      // This is not the first file in the list, prepend it to the beginning
+      file->next = file_list;
+      file->prev = NULL;
+      file_list->prev = file;
       file_list = file;
     }
   }
@@ -183,7 +184,7 @@ int ufs_open(const char *filename, int flags) {
     file_descriptor_used = 0;
   }
 
-  size_t idx = -1;
+  int idx = -1;
 
   if (file_descriptor_used < file_descriptor_capacity) {
     // Find the available one
@@ -252,9 +253,15 @@ ssize_t ufs_write(int fd, const char *buf, size_t size) {
     return -1;
   }
 
-  struct block *block = desc->file->last_block;
+  struct block *block = desc->file->first_block;
+  for (size_t i = 0; i < desc->offset / BLOCK_SIZE; i++) {
+    block = block->next;
+  }
+
   size_t bytes_written = 0;
   while (bytes_written < size) {
+    size_t write_from = desc->offset % BLOCK_SIZE;
+
     if (block == NULL || block->occupied == BLOCK_SIZE) {
       // Create a new block
       block = malloc(sizeof(struct block));
@@ -273,14 +280,17 @@ ssize_t ufs_write(int fd, const char *buf, size_t size) {
       }
     }
 
-    ssize_t bytes_to_write = size - bytes_written;
-    if (bytes_to_write > BLOCK_SIZE - block->occupied) {
-      bytes_to_write = BLOCK_SIZE - block->occupied;
+    size_t bytes_to_write = size - bytes_written;
+    if (bytes_to_write > BLOCK_SIZE - write_from) {
+      bytes_to_write = BLOCK_SIZE - write_from;
     }
 
-    memcpy(block->memory + block->occupied, buf + bytes_written,
+    memcpy(block->memory + write_from, buf + bytes_written,
            bytes_to_write);
-    block->occupied += bytes_to_write;
+    if ((int)(write_from + bytes_to_write) > block->occupied) {
+      // Update the occupied size
+      block->occupied = (int)(write_from + bytes_to_write);
+    }
     bytes_written += bytes_to_write;
     desc->offset += bytes_to_write;
   }
@@ -290,7 +300,7 @@ ssize_t ufs_write(int fd, const char *buf, size_t size) {
     desc->file->size = desc->offset;
   }
 
-  return bytes_written;
+  return (ssize_t)bytes_written;
 }
 
 ssize_t ufs_read(int fd, char *buf, size_t size) {
@@ -315,10 +325,13 @@ ssize_t ufs_read(int fd, char *buf, size_t size) {
     return -1;
   }
 
-  struct block *block = desc->file->last_block;
-  if (block == NULL) {
-    // File is empty
-    return 0;
+  struct block *block = desc->file->first_block;
+  for (size_t i = 0; i < desc->offset / BLOCK_SIZE; i++) {
+    if (block == NULL) {
+      // We've reached the end of the file
+      return 0;
+    }
+    block = block->next;
   }
 
   if (desc->offset >= desc->file->size) {
@@ -328,7 +341,7 @@ ssize_t ufs_read(int fd, char *buf, size_t size) {
 
   ssize_t read_count = 0;
   while (block != NULL && read_count < (ssize_t)size) {
-    int block_offset = desc->offset % BLOCK_SIZE;
+    int block_offset = (int)(desc->offset) % BLOCK_SIZE;
 
     if (block_offset - block->occupied >= 0) {
       // We've reached the end of the file
@@ -341,7 +354,7 @@ ssize_t ufs_read(int fd, char *buf, size_t size) {
     }
 
     memcpy(buf + read_count, block->memory + block_offset, bytes_to_copy);
-    read_count += bytes_to_copy;
+    read_count += (ssize_t)(bytes_to_copy);
     desc->offset += bytes_to_copy;
     block = block->next;
   }

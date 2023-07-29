@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 enum {
   BLOCK_SIZE = 512,
@@ -30,13 +31,6 @@ struct block {
    * Next block in the file. NULL if it is the last block.
    */
   struct block *next;
-
-  /**
-   * Previous block in the file. NULL if it is the first block.
-   */
-  struct block *prev;
-
-  /* PUT HERE OTHER MEMBERS */
 };
 
 struct file {
@@ -54,6 +48,11 @@ struct file {
    * Number of file descriptors that are using the file.
    */
   int refs;
+
+  /**
+   * Whether the file was deleted, but has references.
+   */
+  bool is_ghost;
 
   /**
    * Size of the file in bytes.
@@ -74,8 +73,6 @@ struct file {
    * Pointer to the previous file. NULL if it is the first file in the list.
    */
   struct file *prev;
-
-  /* PUT HERE OTHER MEMBERS */
 };
 
 /** List of all files. */
@@ -96,8 +93,6 @@ struct filedesc {
    * Current offset in the file (0 means first byte).
    */
   size_t offset;
-
-  /* PUT HERE OTHER MEMBERS */
 };
 
 /**
@@ -112,6 +107,18 @@ static int file_descriptor_used = 0;
 static int file_descriptor_capacity = 0;
 
 enum ufs_error_code ufs_errno() { return ufs_error_code; }
+
+void _ufs_unlink_file(struct file *file) {
+  if (file->prev != NULL) {
+    file->prev->next = file->next;
+  }
+  if (file->next != NULL) {
+    file->next->prev = file->prev;
+  }
+  if (file_list == file) {
+    file_list = file->next;
+  }
+}
 
 void _ufs_free_file(struct file *file) {
   if (file->name != NULL) {
@@ -136,7 +143,7 @@ int ufs_open(const char *filename, int flags) {
   struct file *file = NULL;
 
   for (file = file_list; file != NULL; file = file->next) {
-    if (strcmp(file->name, filename) == 0) {
+    if (!file->is_ghost && strcmp(file->name, filename) == 0) {
       // Found the file
       break;
     }
@@ -153,6 +160,7 @@ int ufs_open(const char *filename, int flags) {
     file = malloc(sizeof(struct file));
     file->name = malloc(strlen(filename) + 1);
     strcpy(file->name, filename);
+    file->is_ghost = false;
     file->refs = 0;
     file->size = 0;
     file->first_block = NULL;
@@ -268,7 +276,6 @@ ssize_t ufs_write(int fd, const char *buf, size_t size) {
       block->memory = malloc(BLOCK_SIZE);
       block->next = NULL;
       block->occupied = 0;
-      block->prev = desc->file->last_block;
       if (desc->file->last_block == NULL) {
         // This is the first block
         desc->file->first_block = block;
@@ -378,9 +385,9 @@ int ufs_close(int fd) {
   }
 
   desc->file->refs--;
-  if (desc->file->refs <= 0 && file_list != desc->file &&
-      desc->file->prev == NULL && desc->file->next == NULL) {
+  if (desc->file->refs <= 0 && desc->file->is_ghost) {
     // No more file descriptors and no any references to the file, delete it
+    _ufs_unlink_file(desc->file);
     _ufs_free_file(desc->file);
   }
 
@@ -394,7 +401,7 @@ int ufs_close(int fd) {
 int ufs_delete(const char *filename) {
   struct file *file = NULL;
   for (file = file_list; file != NULL; file = file->next) {
-    if (strcmp(file->name, filename) == 0) {
+    if (!file->is_ghost && strcmp(file->name, filename) == 0) {
       // Found the file
       break;
     }
@@ -406,20 +413,11 @@ int ufs_delete(const char *filename) {
     return -1;
   }
 
-  // Remove file from list
-  if (file->prev != NULL) {
-    file->prev->next = file->next;
-  }
-  if (file->next != NULL) {
-    file->next->prev = file->prev;
-  }
-  if (file_list == file) {
-    file_list = file->next;
-  }
-
   if (file->refs <= 0) {
-    // No file descriptor is opened
+    _ufs_unlink_file(file);
     _ufs_free_file(file);
+  } else {
+      file->is_ghost = true;
   }
 
   return 0;

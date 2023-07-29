@@ -424,12 +424,15 @@ int ufs_delete(const char *filename) {
 }
 
 void ufs_destroy(void) {
-  for (int i = 0; i < file_descriptor_capacity; i++) {
-    if (file_descriptors[i] != NULL) {
-      free(file_descriptors[i]);
+  if (file_descriptor_capacity > 0 || file_descriptors != NULL) {
+    for (int i = 0; i < file_descriptor_capacity; i++) {
+      if (file_descriptors[i] != NULL) {
+        free(file_descriptors[i]);
+      }
     }
+    free(file_descriptors);
+    file_descriptors = NULL;
   }
-  file_descriptors = NULL;
   file_descriptor_capacity = 0;
   file_descriptor_used = 0;
 

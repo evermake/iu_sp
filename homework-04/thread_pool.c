@@ -251,17 +251,6 @@ int thread_task_join(struct thread_task *task, void **result) {
 
 #ifdef NEED_TIMED_JOIN
 
-struct timespec double_to_timespec(double duration) {
-  struct timespec ts;
-  ts.tv_sec = (time_t) duration;
-  ts.tv_nsec = (long)((duration - (double)(ts.tv_sec)) * 1e9);
-  if (ts.tv_nsec >= 1000000000) {
-    ts.tv_sec++;
-    ts.tv_nsec -= 1000000000;
-  }
-  return ts;
-}
-
 int thread_task_timed_join(struct thread_task *task, double timeout, void **result) {
   if (task->pool == NULL) {
     return TPOOL_ERR_TASK_NOT_PUSHED;
@@ -275,12 +264,17 @@ int thread_task_timed_join(struct thread_task *task, double timeout, void **resu
       return TPOOL_ERR_TIMEOUT;
     }
   } else {
+    long timeout_sec = (long)timeout;
+    long timeout_nsec = (long)((timeout - (double)timeout_sec) * 1000000000);
     struct timeval tv;
     struct timespec ts;
-    struct timespec timeout_ts = double_to_timespec(timeout);
     gettimeofday(&tv, NULL);
-    ts.tv_sec = tv.tv_sec + timeout_ts.tv_sec;
-    ts.tv_nsec = tv.tv_usec * 1000 + timeout_ts.tv_nsec;
+    long total_nsec = tv.tv_usec * 1000 + timeout_nsec;
+    long total_sec = tv.tv_sec + timeout_sec + total_nsec / 1000000000;
+    total_nsec %= 1000000000;
+
+    ts.tv_sec = total_sec;
+    ts.tv_nsec = total_nsec;
 
     int cond_res = 0;
     while (!task->is_finished && cond_res != ETIMEDOUT) {

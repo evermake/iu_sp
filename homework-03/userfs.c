@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <assert.h>
 
 enum {
   BLOCK_SIZE = 512,
@@ -31,6 +32,11 @@ struct block {
    * Next block in the file. NULL if it is the last block.
    */
   struct block *next;
+
+  /**
+   * Previous block in the file. NULL if it is the first block.
+   */
+  struct block *prev;
 };
 
 struct file {
@@ -274,14 +280,18 @@ ssize_t ufs_write(int fd, const char *buf, size_t size) {
       // Create a new block
       block = malloc(sizeof(struct block));
       block->memory = malloc(BLOCK_SIZE);
-      block->next = NULL;
       block->occupied = 0;
       if (desc->file->last_block == NULL) {
         // This is the first block
+        assert(desc->file->first_block == NULL);
         desc->file->first_block = block;
         desc->file->last_block = block;
+        block->prev = NULL;
+        block->next = NULL;
       } else {
         // Append the block to the end of the file
+        block->prev = desc->file->last_block;
+        block->next = NULL;
         desc->file->last_block->next = block;
         desc->file->last_block = block;
       }
@@ -421,6 +431,104 @@ int ufs_delete(const char *filename) {
   }
 
   return 0;
+}
+
+int ufs_resize(int fd, size_t new_size) {
+  int desc_idx = fd - 1;
+  if (desc_idx < 0 || desc_idx >= file_descriptor_capacity) {
+    // Invalid file descriptor
+    ufs_error_code = UFS_ERR_NO_FILE;
+    return -1;
+  }
+
+  struct filedesc *desc = file_descriptors[desc_idx];
+  if (desc == NULL) {
+    // Invalid file descriptor
+    ufs_error_code = UFS_ERR_NO_FILE;
+    return -1;
+  }
+
+  if (new_size == desc->file->size) {
+    // Nothing to do
+    return 0;
+  } else if (new_size < desc->file->size) {
+    size_t new_block_count = (new_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    size_t old_block_count = (desc->file->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    int new_last_block_occupied = (int)((new_size) % BLOCK_SIZE);
+    if (new_last_block_occupied == 0) {
+      new_last_block_occupied = BLOCK_SIZE;
+    }
+    struct block *block = desc->file->last_block;
+    for (size_t i = 0; i < old_block_count - new_block_count; i++) {
+      struct block *prev_block = block->prev;
+
+      if (prev_block != NULL) {
+        prev_block->next = NULL;
+      }
+
+      free(block->memory);
+      free(block);
+
+      block = prev_block;
+    }
+
+    if (block == NULL) {
+      assert(new_size == 0);
+      assert(new_block_count == 0);
+      desc->file->first_block = NULL;
+      desc->file->last_block = NULL;
+      desc->file->size = 0;
+    } else {
+      block->occupied = new_last_block_occupied;
+      desc->file->last_block = block;
+      desc->file->size = new_size;
+    }
+
+    for (int i = 0; i < file_descriptor_capacity; i++) {
+      if (file_descriptors[i] != NULL && file_descriptors[i]->file == desc->file && file_descriptors[i]->offset > new_size) {
+        file_descriptors[i]->offset = new_size;
+      }
+    }
+
+    return 0;
+  } else if (new_size > desc->file->size) {
+    if (new_size > MAX_FILE_SIZE) {
+      // File is too big
+      ufs_error_code = UFS_ERR_NO_MEM;
+      return -1;
+    }
+
+    size_t new_block_count = (new_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    size_t old_block_count = (desc->file->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    int new_last_block_occupied = (int)((new_size) % BLOCK_SIZE);
+    if (new_last_block_occupied == 0) {
+      new_last_block_occupied = BLOCK_SIZE;
+    }
+    for (size_t i = 0; i < new_block_count - old_block_count; i++) {
+      struct block *block = malloc(sizeof(struct block));
+      block->memory = calloc(BLOCK_SIZE, 1);
+
+      block->occupied = BLOCK_SIZE;
+      block->next = NULL;
+      block->prev = desc->file->last_block;
+      if (desc->file->last_block != NULL) {
+        desc->file->last_block->next = block;
+      }
+      desc->file->last_block = block;
+      if (desc->file->first_block == NULL) {
+        desc->file->first_block = block;
+      }
+    }
+
+    desc->file->last_block->occupied = new_last_block_occupied;
+    desc->file->size = new_size;
+
+    return 0;
+  }
+
+  // should be impossible
+  ufs_error_code = UFS_ERR_NOT_IMPLEMENTED;
+  return -1;
 }
 
 void ufs_destroy(void) {

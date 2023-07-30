@@ -220,6 +220,12 @@ int ufs_open(const char *filename, int flags) {
     file_descriptors =
         realloc(file_descriptors,
                 sizeof(struct filedesc *) * (file_descriptor_capacity * 2));
+
+    // Set all new file descriptors to NULL
+    for (int i = file_descriptor_capacity; i < file_descriptor_capacity * 2; i++) {
+      file_descriptors[i] = NULL;
+    }
+
     file_descriptor_capacity *= 2;
     idx = file_descriptor_used;
   }
@@ -508,11 +514,11 @@ int ufs_resize(int fd, size_t new_size) {
       struct block *block = malloc(sizeof(struct block));
       block->memory = calloc(BLOCK_SIZE, 1);
 
-      block->occupied = BLOCK_SIZE;
       block->next = NULL;
       block->prev = desc->file->last_block;
       if (desc->file->last_block != NULL) {
         desc->file->last_block->next = block;
+        desc->file->last_block->occupied = BLOCK_SIZE;
       }
       desc->file->last_block = block;
       if (desc->file->first_block == NULL) {

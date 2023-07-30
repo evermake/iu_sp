@@ -11,6 +11,7 @@ struct thread_task {
   void *arg;
   struct thread_pool *pool;
 
+  bool is_detached;
   bool is_running;
   bool is_finished;
   void *result;
@@ -89,11 +90,15 @@ static void *_thread_worker(void *arg) {
 
     pthread_mutex_lock(&pool->mutex);
     pthread_mutex_lock(&task->mutex);
-    task->is_running = false;
-    task->is_finished = true;
-    task->result = result;
     --pool->running_task_count;
-    pthread_cond_signal(&task->cv);
+    if (task->is_detached) {
+      thread_task_delete(task);
+    } else {
+      task->is_running = false;
+      task->is_finished = true;
+      task->result = result;
+      pthread_cond_signal(&task->cv);
+    }
     pthread_mutex_unlock(&task->mutex);
   }
   return NULL;
@@ -208,6 +213,7 @@ int thread_task_new(struct thread_task **task, thread_task_f function,
   new_task->function = function;
   new_task->arg = arg;
   new_task->pool = NULL;
+  new_task->is_detached = false;
   new_task->is_running = false;
   new_task->is_finished = false;
   new_task->result = NULL;
@@ -248,10 +254,10 @@ int thread_task_join(struct thread_task *task, void **result) {
 struct timespec double_to_timespec(double duration) {
   struct timespec ts;
   ts.tv_sec = (time_t) duration;
-  ts.tv_nsec = (duration - ts.tv_sec) * 1e9;
-  if (ts.tv_nsec >= 1e9) {
+  ts.tv_nsec = (long)((duration - (double)(ts.tv_sec)) * 1e9);
+  if (ts.tv_nsec >= 1000000000) {
     ts.tv_sec++;
-    ts.tv_nsec -= 1e9;
+    ts.tv_nsec -= 1000000000;
   }
   return ts;
 }
@@ -309,9 +315,19 @@ int thread_task_delete(struct thread_task *task) {
 #ifdef NEED_DETACH
 
 int thread_task_detach(struct thread_task *task) {
-  /* IMPLEMENT THIS FUNCTION */
-  (void)task;
-  return TPOOL_ERR_NOT_IMPLEMENTED;
+  if (task->pool == NULL) {
+    return TPOOL_ERR_TASK_NOT_PUSHED;
+  }
+  pthread_mutex_lock(&task->mutex);
+  task->pool = NULL;
+  if (task->is_finished) {
+    pthread_mutex_unlock(&task->mutex);
+    thread_task_delete(task);
+    return 0;
+  }
+  task->is_detached = true;
+  pthread_mutex_unlock(&task->mutex);
+  return 0;
 }
 
 #endif
